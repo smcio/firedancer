@@ -10,14 +10,28 @@ static void usage(const char* progname) {
   fprintf(stderr, "  --snapshotfile (-s)        Input snapshot file\n");
 }
 
-static void decompressFile(const char* fname) {
+struct SnapshotParser {
+    size_t totsize_;
+};
+
+void SnapshotParser_init(struct SnapshotParser* self) {
+  self->totsize_ = 0;
+}
+
+void SnapshotParser_moreData(void* arg, const void* data, size_t datalen) {
+  struct SnapshotParser* self = (struct SnapshotParser*)arg;
+  (void)data;
+  self->totsize_ += datalen;
+}
+
+typedef void (*decompressCallback)(void* arg, const void* data, size_t datalen);
+static void decompressFile(const char* fname, decompressCallback cb, void* arg) {
   FILE* const fin  = fopen(fname, "rb");
   if (fin == NULL) {
     FD_LOG_CRIT(( "unable to read file: %s", fname ));
   }
   size_t const buffInSize = ZSTD_DStreamInSize();
   void*  buffIn = alloca(buffInSize);
-  FILE* const fout = stdout;
   size_t const buffOutSize = ZSTD_DStreamOutSize();  /* Guarantee to successfully flush at least one complete compressed block in all circumstances. */
   void* buffOut = alloca(buffOutSize);
 
@@ -52,7 +66,7 @@ static void decompressFile(const char* fname) {
        * error.
        */
       size_t const ret = ZSTD_decompressStream(dctx, &output , &input);
-      fwrite(buffOut, 1, output.pos, fout);
+      (*cb)(arg, buffOut, output.pos);
       lastRet = ret;
     }
   }
@@ -68,7 +82,6 @@ static void decompressFile(const char* fname) {
 
   ZSTD_freeDCtx(dctx);
   fclose(fin);
-  fclose(fout);
 }
 
 int main(int argc, char** argv) {
@@ -96,7 +109,10 @@ int main(int argc, char** argv) {
     return 1;
   }
 
-  decompressFile(snapshotfile);
+  struct SnapshotParser parser;
+  SnapshotParser_init(&parser);
+  decompressFile(snapshotfile, SnapshotParser_moreData, &parser);
+  printf("decompressed %lu bytes\n", parser.totsize_);
   
   return 0;
 }
