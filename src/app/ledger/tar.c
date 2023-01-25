@@ -56,7 +56,8 @@ int TarReadStream_moreData(struct TarReadStream* self, const void* data, size_t 
       }
       if (entsize == 0) {
         // No content. Probably a directory.
-        (*cb)(arg, blk->header.name, NULL, 0);
+        if (blk->header.typeflag == 0 || blk->header.typeflag == '0')
+          (*cb)(arg, blk->header.name, NULL, 0);
         self->cursize_ = self->totalsize_ = 0;
         continue;
       }
@@ -64,6 +65,15 @@ int TarReadStream_moreData(struct TarReadStream* self, const void* data, size_t 
       self->cursize_ = 0;
       self->totalsize_ = entsize;
       self->roundedsize_ = (entsize + (BLOCKSIZE-1))&(~((size_t)BLOCKSIZE-1));
+      if (self->roundedsize_ <= datalen) {
+        // Bypass data copy
+        if (blk->header.typeflag == 0 || blk->header.typeflag == '0')
+          (*cb)(arg, blk->header.name, data, self->totalsize_);
+        data = (const char*)data + self->roundedsize_;
+        datalen -= self->roundedsize_;
+        self->cursize_ = self->totalsize_ = 0;
+        continue;
+      }
       if (self->roundedsize_ > self->bufmax_) {
         free(self->buf_);
         self->buf_ = malloc(self->bufmax_ = self->roundedsize_);
@@ -74,7 +84,8 @@ int TarReadStream_moreData(struct TarReadStream* self, const void* data, size_t 
       CONSUME_DATA(self->buf_, self->cursize_, self->roundedsize_);
       if (self->cursize_ == self->roundedsize_) {
         // Finished entry
-        (*cb)(arg, blk->header.name, self->buf_, self->totalsize_);
+        if (blk->header.typeflag == 0 || blk->header.typeflag == '0')
+          (*cb)(arg, blk->header.name, self->buf_, self->totalsize_);
         self->cursize_ = self->totalsize_ = 0;
       }
     }
