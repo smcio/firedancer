@@ -8,6 +8,7 @@
 #include <errno.h>
 #include <zstd.h>      // presumes zstd library is installed
 #include "../../util/fd_util.h"
+#include "tar.h"
 
 static void usage(const char* progname) {
   fprintf(stderr, "USAGE: %s\n", progname);
@@ -15,17 +16,20 @@ static void usage(const char* progname) {
 }
 
 struct SnapshotParser {
-    size_t totsize_;
+  struct TarReadStream tarreader_;
 };
 
 void SnapshotParser_init(struct SnapshotParser* self) {
-  self->totsize_ = 0;
+  TarReadStream_init(&self->tarreader_);
+}
+
+void SnapshotParser_destroy(struct SnapshotParser* self) {
+  TarReadStream_destroy(&self->tarreader_);
 }
 
 void SnapshotParser_moreData(void* arg, const void* data, size_t datalen) {
   struct SnapshotParser* self = (struct SnapshotParser*)arg;
-  (void)data;
-  self->totsize_ += datalen;
+  TarReadStream_moreData(&self->tarreader_, data, datalen);
 }
 
 typedef void (*decompressCallback)(void* arg, const void* data, size_t datalen);
@@ -100,7 +104,7 @@ int main(int argc, char** argv) {
   struct SnapshotParser parser;
   SnapshotParser_init(&parser);
   decompressFile(snapshotfile, SnapshotParser_moreData, &parser);
-  printf("decompressed %lu bytes\n", parser.totsize_);
+  SnapshotParser_destroy(&parser);
   
   return 0;
 }
