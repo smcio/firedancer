@@ -27,12 +27,19 @@ void SnapshotParser_destroy(struct SnapshotParser* self) {
   TarReadStream_destroy(&self->tarreader_);
 }
 
-void SnapshotParser_moreData(void* arg, const void* data, size_t datalen) {
-  struct SnapshotParser* self = (struct SnapshotParser*)arg;
-  TarReadStream_moreData(&self->tarreader_, data, datalen);
+void SnapshotParser_tarEntry(void* arg, const char* name, const void* data, size_t datalen) {
+  printf("%s %lu\n", name, datalen);
+  (void)arg;
+  (void)data;
 }
 
-typedef void (*decompressCallback)(void* arg, const void* data, size_t datalen);
+// Return non-zero on end of tarball
+int SnapshotParser_moreData(void* arg, const void* data, size_t datalen) {
+  struct SnapshotParser* self = (struct SnapshotParser*)arg;
+  return TarReadStream_moreData(&self->tarreader_, data, datalen, SnapshotParser_tarEntry, self);
+}
+
+typedef int (*decompressCallback)(void* arg, const void* data, size_t datalen);
 static void decompressFile(const char* fname, decompressCallback cb, void* arg) {
   int const fin = open(fname, O_RDONLY);
   if (fin == -1) {
@@ -76,7 +83,10 @@ static void decompressFile(const char* fname, decompressCallback cb, void* arg) 
        * error.
        */
       size_t const ret = ZSTD_decompressStream(dctx, &output , &input);
-      (*cb)(arg, buffOut, output.pos);
+      if ((*cb)(arg, buffOut, output.pos)) {
+        lastRet = 0;
+        break;
+      }
       lastRet = ret;
     }
   }

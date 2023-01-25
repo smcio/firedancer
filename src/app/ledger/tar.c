@@ -22,7 +22,7 @@ void TarReadStream_init(struct TarReadStream* self) {
   self->bufmax_ = TarReadStream_initBufSize;
 }
 
-void TarReadStream_moreData(struct TarReadStream* self, const void* data, size_t datalen) {
+int TarReadStream_moreData(struct TarReadStream* self, const void* data, size_t datalen, TarReadStream_callback cb, void* arg) {
 #define CONSUME_DATA(target, cursize, maxsize)           \
   { size_t newsize = cursize + datalen;                  \
     if (newsize > maxsize) newsize = maxsize;            \
@@ -32,22 +32,31 @@ void TarReadStream_moreData(struct TarReadStream* self, const void* data, size_t
     data = (const char*)data + consumed;                 \
     datalen -= consumed; }
 
+  union block* blk = (union block*)self->header_;
   while (datalen) {
     if (self->totalsize_ == 0) {
       // Reading header
       CONSUME_DATA(self->header_, self->cursize_, BLOCKSIZE);
       if (self->cursize_ < BLOCKSIZE) {
         // Incomplete header
-        return;
+        continue;
       }
-      union block* blk = (union block*)self->header_;
       if (memcmp(blk->header.magic, TMAGIC " ", sizeof(blk->header.magic)) != 0) {
         FD_LOG_ERR(( "tar file has wrong magic number" ));
       }
-      printf("%s\n", blk->header.name);
-      size_t entsize = (size_t)strtol(blk->header.size, NULL, 10);
+      if (blk->header.name[0] == '\0') {
+        // End of tarball
+        return -1;
+      }
+      size_t entsize = 0;
+      for (const char* p = blk->header.size; p < blk->header.size + sizeof(blk->header.size); ++p) {
+        if (*p == '\0')
+          break;
+        entsize = (entsize << 3) + (size_t)(*p - '0'); // Octal
+      }
       if (entsize == 0) {
         // No content. Probably a directory.
+        (*cb)(arg, blk->header.name, NULL, 0);
         self->cursize_ = self->totalsize_ = 0;
         continue;
       }
@@ -65,10 +74,13 @@ void TarReadStream_moreData(struct TarReadStream* self, const void* data, size_t
       CONSUME_DATA(self->buf_, self->cursize_, self->roundedsize_);
       if (self->cursize_ == self->roundedsize_) {
         // Finished entry
+        (*cb)(arg, blk->header.name, self->buf_, self->totalsize_);
         self->cursize_ = self->totalsize_ = 0;
       }
     }
   }
+
+  return 0;
 
 #undef CONSUME_DATA
 }
