@@ -41,12 +41,12 @@ int TarReadStream_moreData(struct TarReadStream* self, const void* data, size_t 
         // Incomplete header
         continue;
       }
-      if (memcmp(blk->header.magic, TMAGIC " ", sizeof(blk->header.magic)) != 0) {
-        FD_LOG_ERR(( "tar file has wrong magic number" ));
-      }
       if (blk->header.name[0] == '\0') {
         // End of tarball
         return -1;
+      }
+      if (memcmp(blk->header.magic, TMAGIC " ", sizeof(blk->header.magic)) != 0) {
+        FD_LOG_ERR(( "tar file has wrong magic number" ));
       }
       size_t entsize = 0;
       for (const char* p = blk->header.size; p < blk->header.size + sizeof(blk->header.size); ++p) {
