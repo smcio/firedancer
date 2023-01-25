@@ -1,13 +1,17 @@
-#include <getopt.h>
 #include <stdio.h>
 #include <stddef.h>
 #include <alloca.h>
+#include <unistd.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <errno.h>
 #include <zstd.h>      // presumes zstd library is installed
 #include "../../util/fd_util.h"
 
 static void usage(const char* progname) {
   fprintf(stderr, "USAGE: %s\n", progname);
-  fprintf(stderr, "  --snapshotfile (-s)        Input snapshot file\n");
+  fprintf(stderr, "  --snapshotfile <file>        Input snapshot file\n");
 }
 
 struct SnapshotParser {
@@ -26,9 +30,9 @@ void SnapshotParser_moreData(void* arg, const void* data, size_t datalen) {
 
 typedef void (*decompressCallback)(void* arg, const void* data, size_t datalen);
 static void decompressFile(const char* fname, decompressCallback cb, void* arg) {
-  FILE* const fin  = fopen(fname, "rb");
-  if (fin == NULL) {
-    FD_LOG_CRIT(( "unable to read file: %s", fname ));
+  int const fin = open(fname, O_RDONLY);
+  if (fin == -1) {
+    FD_LOG_ERR(( "unable to read file %s: %s", fname, strerror(errno) ));
   }
   size_t const buffInSize = ZSTD_DStreamInSize();
   void*  buffIn = alloca(buffInSize);
@@ -37,7 +41,7 @@ static void decompressFile(const char* fname, decompressCallback cb, void* arg) 
 
   ZSTD_DCtx* const dctx = ZSTD_createDCtx();
   if (dctx == NULL) {
-    FD_LOG_CRIT(( "ZSTD_createDCtx() failed!"));
+    FD_LOG_ERR(( "ZSTD_createDCtx() failed!"));
   }
 
   /* This loop assumes that the input file is one or more concatenated zstd
@@ -46,11 +50,13 @@ static void decompressFile(const char* fname, decompressCallback cb, void* arg) 
    * ZSTD_decompressStream() returns 0 exactly when the frame is completed,
    * and doesn't consume input after the frame.
    */
-  size_t const toRead = buffInSize;
-  size_t read;
+  ssize_t readRet;
   size_t lastRet = 0;
-  while ( (read = fread(buffIn, 1, toRead, fin)) ) {
-    ZSTD_inBuffer input = { buffIn, read, 0 };
+  while ( (readRet = read(fin, buffIn, buffInSize)) ) {
+    if (readRet == -1) {
+      FD_LOG_ERR(( "unable to read file %s: %s", fname, strerror(errno) ));
+    }
+    ZSTD_inBuffer input = { buffIn, (unsigned)readRet, 0 };
     /* Given a valid frame, zstd won't consume the last byte of the frame
      * until it has flushed all of the decompressed data of the frame.
      * Therefore, instead of checking if the return code is 0, we can
@@ -77,33 +83,15 @@ static void decompressFile(const char* fname, decompressCallback cb, void* arg) 
      * frame, but we reached the end of the file! We assume this is an
      * error, and the input was truncated.
      */
-    FD_LOG_CRIT(( "EOF before end of stream: %zu", lastRet ));
+    FD_LOG_ERR(( "EOF before end of stream: %zu", lastRet ));
   }
 
   ZSTD_freeDCtx(dctx);
-  fclose(fin);
+  close(fin);
 }
 
 int main(int argc, char** argv) {
-  const char* snapshotfile = NULL;
-  static struct option arguments[] = {
-    {"snapshotfile", required_argument, 0, 's'},
-    {"help", no_argument, 0, 'h'},
-    {0, 0, 0, 0}
-  };
-  int option_index = 0, ret = -2;
-  while(-1 != (ret = getopt_long(argc, argv, "s:h", arguments, &option_index))) {
-    switch (ret) {
-    case 's':
-      if (optarg != NULL)
-        snapshotfile = optarg;
-      break;
-    case 'h':
-    default:
-      usage(argv[0]);
-      return 1;
-    }
-  }
+  const char* snapshotfile = fd_env_strip_cmdline_cstr(&argc, &argv, "--snapshotfile", NULL, NULL);
   if (snapshotfile == NULL) {
     usage(argv[0]);
     return 1;
