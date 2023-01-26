@@ -15,6 +15,23 @@ static void usage(const char* progname) {
   fprintf(stderr, "  --snapshotfile <file>        Input snapshot file\n");
 }
 
+struct Account_StoredMeta {
+    unsigned long write_version_obsolete;
+    char pubkey[32];
+    unsigned long data_len;
+};
+
+struct Account_AccountMeta {
+    unsigned long lamports;
+    char owner[32];
+    char executable;
+    unsigned long rent_epoch;
+};
+
+struct Account_Hash {
+    char value[32];
+};
+
 struct SnapshotParser {
   struct TarReadStream tarreader_;
 };
@@ -28,9 +45,36 @@ void SnapshotParser_destroy(struct SnapshotParser* self) {
 }
 
 void SnapshotParser_tarEntry(void* arg, const char* name, const void* data, size_t datalen) {
-  printf("%s %lu\n", name, datalen);
   (void)arg;
-  (void)data;
+  
+  if (strncmp(name, "accounts/", sizeof("accounts/")-1) != 0)
+    return;
+
+  while (datalen) {
+    size_t roundedlen;
+    
+#define EAT_SLICE(_target_, _len_)         \
+    roundedlen = (_len_+7UL)&~7UL;         \
+    if (roundedlen > datalen) return;      \
+    memcpy(_target_, data, _len_);         \
+    data = (const char*)data + roundedlen; \
+    datalen -= roundedlen;
+
+    struct Account_StoredMeta meta;
+    EAT_SLICE(&meta, sizeof(meta));
+    struct Account_AccountMeta account_meta;
+    EAT_SLICE(&account_meta, sizeof(account_meta));
+    struct Account_Hash hash;
+    EAT_SLICE(&hash, sizeof(hash));
+
+    // Skip data for now
+    roundedlen = (meta.data_len+7UL)&~7UL;
+    if (roundedlen > datalen) return;
+    data = (const char*)data + roundedlen;
+    datalen -= roundedlen;
+
+#undef EAT_SLICE
+  }
 }
 
 // Return non-zero on end of tarball
