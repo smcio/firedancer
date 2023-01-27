@@ -143,6 +143,35 @@ typedef uchar fd_bmtree20_node_t[FD_BMTREE20_NODE_SZ];
 /* fd_bmtree20_node_t is the hash of a SHA-256 tree node (32 bytes) */
 typedef uchar fd_bmtree32_node_t[FD_BMTREE32_NODE_SZ];
 
+static inline void
+fd_bmtree20_hash_leaf( fd_bmtree20_node_t * node,
+                       void * data,
+                       ulong  data_sz ) {
+  fd_sha256_t sha;
+  fd_sha256_init( &sha );
+
+  uchar const prefix[1] = { FD_BMTREE_PREFIX_LEAF };
+  fd_sha256_append( &sha, prefix, 1UL     );
+  fd_sha256_append( &sha, data,   data_sz );
+
+  uchar out[ 32 ];
+  fd_sha256_fini( &sha, out );
+  fd_memcpy( node, out, sizeof(fd_bmtree20_node_t) );
+}
+
+static inline void
+fd_bmtree32_hash_leaf( fd_bmtree32_node_t node,
+                       void const * data,
+                       ulong        data_sz ) {
+  fd_sha256_t sha;
+  fd_sha256_init( &sha );
+
+  uchar const prefix[1] = { FD_BMTREE_PREFIX_LEAF };
+  fd_sha256_append( &sha, prefix, 1UL     );
+  fd_sha256_append( &sha, data,   data_sz );
+  fd_sha256_fini( &sha, node );
+}
+
 /* fd_bmtree*_commit_t stores intermediate state used to compute the
    root of a binary Merkle tree built incrementally.
 
