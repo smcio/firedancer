@@ -29,6 +29,8 @@
 
 #include "../fd_ballet_base.h"
 
+#include "../ed25519/fd_ed25519.h"
+
 /* FD_TXN_VLEGACY: the initial, pre-V0 transaction format. */
 #define FD_TXN_VLEGACY ((uchar)0xFF)
 /* FD_TXN_V0: The second transaction format.  Includes a version number and
@@ -349,6 +351,12 @@ FD_PROTOTYPES_BEGIN
 static inline fd_txn_acct_addr_lut_t *
 fd_txn_get_address_tables( fd_txn_t * txn ) {
   return (fd_txn_acct_addr_lut_t *)(txn->instr + txn->instr_cnt);
+}
+
+static inline fd_ed25519_sig_t const *
+fd_txn_signatures( fd_txn_t const * txn,
+                   void const *     buf ) {
+   return (fd_ed25519_sig_t const *)((ulong)buf + (ulong)txn->signature_off);
 }
 
 /* fd_txn_footprint: Returns the total size of txn, including the
