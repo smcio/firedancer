@@ -331,7 +331,7 @@ struct fd_txn_parse_counters {
   ulong failure_cnt;
   /* failure_ring: some information about the causes of recent transaction
      parsing failures.  Specifically, the line of code which detected that the
-     ith malformed transaction was malformed maps to 
+     ith malformed transaction was malformed maps to
      failure_ring[ i%FD_TXN_PARSE_COUNTERS_RING_SZ ] (where i starts at 0), and the
      last instance mapping to each element of the array is the one that is
      actually present.  If fewer than FD_TXN_PARSE_COUNTERS_RING_SZ failures have
@@ -379,7 +379,10 @@ fd_txn_footprint( ulong instr_cnt,
    accumulated into the struct pointed to by counters_opt. Note: The returned
    txn object is not self-contained since it refers to byte ranges inside the
    payload. */
-ulong fd_txn_parse( uchar const * payload, ulong payload_sz, void * out_buf, fd_txn_parse_counters_t * counters_opt );
+ulong fd_txn_parse( uchar const * payload,
+                    ulong         payload_sz,
+                    void *        out_buf,
+                    fd_txn_parse_counters_t * counters_opt );
 
 FD_PROTOTYPES_END
 
