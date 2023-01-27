@@ -47,7 +47,7 @@ void SnapshotParser_destroy(struct SnapshotParser* self) {
 void SnapshotParser_tarEntry(void* arg, const char* name, const void* data, size_t datalen) {
   (void)arg;
   
-  if (strncmp(name, "accounts/", sizeof("accounts/")-1) != 0)
+  if (datalen == 0 || strncmp(name, "accounts/", sizeof("accounts/")-1) != 0)
     return;
 
   while (datalen) {
@@ -75,6 +75,8 @@ void SnapshotParser_tarEntry(void* arg, const char* name, const void* data, size
 
 #undef EAT_SLICE
   }
+
+  printf("%s\n", name);
 }
 
 // Return non-zero on end of tarball
