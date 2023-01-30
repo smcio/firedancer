@@ -17,15 +17,16 @@ static void usage(const char* progname) {
 
 struct Account_StoredMeta {
     unsigned long write_version_obsolete;
-    char pubkey[32];
     unsigned long data_len;
+    char pubkey[32];
 };
 
 struct Account_AccountMeta {
     unsigned long lamports;
+    unsigned long rent_epoch;
     char owner[32];
     char executable;
-    unsigned long rent_epoch;
+    char padding[7];
 };
 
 struct Account_Hash {
